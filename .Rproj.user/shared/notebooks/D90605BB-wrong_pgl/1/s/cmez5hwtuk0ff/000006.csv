@@ -1,0 +1,2 @@
+"0","bad_rows= DT_in_arch8[in_arch_8==110]"
+"0","print(geo_samples[Accession %in% bad_rows$gsm,.(Accession,Series,Platform)])"

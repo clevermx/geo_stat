@@ -1,0 +1,83 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+Сначала прочтём данные из ncbi, чтобы получить табличку (gsm,gse,gpl)
+```{r}
+library(data.table)
+geo_samples = fread("d:\\datasets/GEO_stats/geo_samples.tsv")
+DT_GEO=geo_samples[,.(gsm=Accession,gse=strsplit(x = Series,split = ";"),gpl=Platform)]
+DT_GEO[,len:=sapply(gse, length)]
+DT_GEO=DT_GEO[,.(gsm=rep(gsm,len),gse=unlist(gse),gpl=rep(gpl,len))]
+head(DT_GEO)
+```
+Теперь прочтём ту же информацию из ARCHs4 v7 и ARCHs4 v8
+```{r}
+library(rhdf5)
+#получает  data.table (gsm,gse,gpl) из всех h5 файлов в папке path_to_folder
+h5_files_to_DT= function(path_to_folder){
+  DT_h5=data.table()
+  h5_files=list.files(file.path(path_to_folder), '\\.h5$', full.names = TRUE)
+  for (destfile in h5_files) {
+      arch_part= data.table(gsm=h5read(destfile,"/meta/Sample_geo_accession"),
+                            gse=strsplit(x = h5read(destfile,"/meta/Sample_series_id"),split = "Xx-xX"), 
+                            gpl =h5read(destfile,"/meta/Sample_platform_id"))
+      DT_h5=rbindlist(l=list(DT_h5,arch_part))
+  }
+  DT_h5[,len:=sapply(gse, length)]
+  DT_h5=DT_h5[,.(gsm=rep(gsm,len),gse=unlist(gse),gpl=rep(gpl,len))]
+  return(DT_h5)
+}
+DT_arch7= h5_files_to_DT(path_to_folder = "D://datasets/ARCHS4_v7/")
+DT_arch8 = h5_files_to_DT(path_to_folder = "D://datasets/ARCHS4_v8/")
+head(DT_arch7)
+head(DT_arch8)
+```
+Соединим DT_GEO с каждой из DT_arch, чтобы найти есть ли такая тройка (gsm,gse,gpl) в arch
+```{r}
+# =======  DT_GEO left join DT_arch7 ==========
+#для 7 версии
+# способ 1 (быстрее)
+#DT_GEO[DT_arch7,on=c(gse="gse",gsm="gsm"),in_arch_7:=(i.gsm==gsm)*100+(i.gse==gse)*10+(i.gpl==gpl)]
+# способ 2
+DT_in_arch7 = DT_arch7[DT_GEO, 
+                  .(gsm=i.gsm,
+                    gse=i.gse,
+                    gpl=i.gpl,
+                    in_arch_7=(i.gsm==gsm)*100+(i.gse==gse)*10+(i.gpl==gpl)), 
+                  on=c(gse="gse",gsm="gsm")]
+
+head(DT_in_arch7)
+#для 8 версии
+DT_in_arch8 = DT_arch8[DT_GEO, 
+                  .(gsm=i.gsm,
+                    gse=i.gse,
+                    gpl=i.gpl,
+                    in_arch_8=(i.gsm==gsm)*100+(i.gse==gse)*10+(i.gpl==gpl)), 
+                  on=c(gse="gse",gsm="gsm")]
+
+head(DT_in_arch8)
+```
+Посмотрим на то, что получилось. В случае 7 версии, если совпадают gsm и gse, то и gpl равны
+```{r}
+print(unique(DT_in_arch7$in_arch_7)) # тут получили, что если gsm и gse равны, то и gpl равны
+
+```
+
+Посмотрим теперь для 8 версии
+```{r}
+print(unique(DT_in_arch8$in_arch_8)) # выдаст ещё 110
+```
+Получается, что в ARCHs4 V8 есть gpl у каких-то пар (gsm,gse) отличается от gpl, указанного в ncbi.
+Найдём такие gsm и выведем для них информацию из ncbi, v8 и v7
+```{r}
+bad_rows= DT_in_arch8[in_arch_8==110]
+print(geo_samples[Accession %in% bad_rows$gsm,.(Accession,Series,Platform)])
+print(DT_arch7[gsm %in% bad_rows$gsm])
+print(DT_arch8[gsm %in% bad_rows$gsm])
+```
+
+
+

@@ -1,0 +1,1 @@
+"0","print(DT_arch8[gsm %in% bad_rows$gsm])"

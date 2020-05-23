@@ -1,0 +1,280 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+a= geo_samples[,split_ser:= strsplit(x = Series,split = ";")[[1]]]
+
+
+geo_samples[, c("GSE") := # Assign the below result to new columns in geo_samples
+              geo_series[geo_samples, # join
+                  .(Accession), # get the column you need
+                  on = .(Accession %in%  Series # join conditions
+                         )]] # get always the latest EndDate
+
+```
+
+Read GEO and parse gpl annotations
+```{r}
+library(data.table)
+geo_platform= fread("d:\\datasets/GEO_stats/geo_platforms.tsv")
+geo_samples = fread("d:\\datasets/GEO_stats/geo_samples.tsv")
+geo_series= fread("d:\\datasets/GEO_stats/geo_table.tsv")
+print(length(unique(geo_platform$Accession)))
+print(length(unique(geo_samples$Accession)))
+print(length(unique(geo_series$Accession)))
+
+annot_gpl= fread("d:\\datasets/GEO_stats/annot_gpls.txt",header = FALSE,sep = "/",col.names = c("gpl"),select =3 )
+DT_GEO=geo_samples[,.(gsm=Accession,gse=strsplit(x = Series,split = ";"),gpl=Platform)]
+DT_GEO[,len:=sapply(gse, length)]
+DT_GEO=DT_GEO[,.(gsm=rep(gsm,len),gse=unlist(gse),gpl=rep(gpl,len))]
+DT_GEO= geo_series[DT_GEO,
+                        .(gsm=i.gsm,
+                          gse=i.gse,
+                          gpl=i.gpl,
+                          series_type=`Series Type`,
+                          annot=i.gpl%in%annot_gpl$gpl),
+                        on="Accession==gse"]
+
+
+#DT_full_series= DT_splited_GEO[geo_series[,.(Accession,series_type=`Series Type`)],.(gsm,gse,gpl,series_type=i.series_type),on ="gse==Accession"]
+```
+
+find (gsm,gse,gpl) in different h5 files
+```{r}
+library(rhdf5)
+h5_files_to_DT= function(path_to_folder){
+  DT_h5=data.table()
+  h5_files=list.files(file.path(path_to_folder), '\\.h5$', full.names = TRUE)
+  for (destfile in h5_files) {
+      arch_part= data.table(gsm=h5read(destfile,"/meta/Sample_geo_accession"),
+                            gse=strsplit(x = h5read(destfile,"/meta/Sample_series_id"),split = "Xx-xX"), 
+                            gpl =h5read(destfile,"/meta/Sample_platform_id"))
+      DT_h5=rbindlist(l=list(DT_h5,arch_part))
+  }
+  DT_h5[,len:=sapply(gse, length)]
+  DT_h5=DT_h5[,.(gsm=rep(gsm,len),gse=unlist(gse),gpl=rep(gpl,len))]
+  return(DT_h5)
+}
+DT_arch7= h5_files_to_DT(path_to_folder = "D://datasets/ARCHS4_v7/")
+# DT_GEO = DT_arch7[DT_GEO,
+#                   .(gsm=i.gsm,
+#                     gse=i.gse,
+#                     gpl=i.gpl,
+#                     series_type=i.series_type,
+#                     in_arch_7=(i.gsm==gsm)*(i.gse==gse)*(i.gpl==gpl),
+#                     gpl_is_annot =i.annot),
+#                   on=c(gse="gse",gsm="gsm")]
+
+DT_GEO[DT_arch7,on=c(gse="gse",gsm="gsm"),in_arch_7:=(i.gsm==gsm)*(i.gse==gse)*(i.gpl==gpl)]
+DT_arch8 = h5_files_to_DT(path_to_folder = "D://datasets/ARCHS4_v8/")
+DT_GEO[DT_arch8,on=c(gse="gse",gsm="gsm"),in_arch_8:=(i.gsm==gsm)*(i.gse==gse)*(i.gpl==gpl)]
+#trubles with v8!!!
+DT_ArchZOO_count=h5_files_to_DT(path_to_folder = "D://datasets/ARCHS4_zoo_counts/")
+DT_GEO[DT_ArchZOO_count,on=c(gse="gse",gsm="gsm"),in_arch_ZOO:=(i.gsm==gsm)*(i.gse==gse)*(i.gpl==gpl)]
+
+#support stuff
+
+a= h5read("D://datasets/ARCHS4_v8/human_matrix.h5","/meta/Sample_geo_accession")
+t=which(a[a=="GSM4128582"])
+a[t]
+a= h5read("D://datasets/ARCHS4_v8/human_matrix.h5","/meta/Sample_platform_id")
+a[t]
+h5_test_file = "D://datasets/DEE2/srr_files/ecoli_SRR_matrix.h5"
+
+h5ls(h5_test_file,all = TRUE)
+h5f_arch = H5Fopen(arch_h5)
+
+tail(h5f_arch$"/meta/Sample_series_id")
+
+h5_o=h5read(h5_test_file,"/")
+rhdf5::h5closeAll()
+
+test_tsv= "D://datasets/DEE2/ecoli_metadata.tsv"
+a=fread(test_tsv, header = TRUE,sep = "\t")
+
+
+
+```
+
+parse dee2 metadata
+```{r}
+meta_data_folder = "D:/datasets/DEE2/metadata/"
+DT_DEE2_meta=data.table()
+DEE2_meta_files=list.files(file.path(meta_data_folder), '\\.tsv.cut$', full.names = TRUE)
+for (destfile in DEE2_meta_files) {
+ dee_part= fread(destfile, header = TRUE,sep = "\t", col.names = c("gsm","gse"),select =c(6,7))
+DT_DEE2_meta=rbindlist(l=list(DT_DEE2_meta,dee_part))
+}
+DT_DEE2_meta=DT_DEE2_meta[startsWith(x = gsm,prefix = "GSM")]
+#(gsm,gse) -> (gpl)?
+DT_GEO[DT_DEE2_meta,on=c(gse="gse",gsm="gsm"),in_dee2:=(i.gsm==gsm)*(i.gse==gse)]
+head(DT_GEO)
+
+```
+
+```{r}
+#make expression types dict
+all_type_strings=unique(unlist(strsplit(geo_series$`Series Type`,split = ";")))
+expression_types = all_type_strings[grep(pattern ="expression",x = all_type_strings,ignore.case = TRUE)]
+dict_exp_type= 10^(0:(length(expression_types)-1))
+names(dict_exp_type)=expression_types
+
+#count (gse,gpl)
+gse_gpl= DT_GEO[,.(n_gsm=.N,
+                   gsms_arch_7=sum(in_arch_7),
+                   gsms_arch_8=sum(in_arch_8),
+                   gsms_arch_zoo=sum(in_arch_ZOO),
+                   gsms_in_dee2=sum(in_dee2) 
+                   ), by=.(gse,gpl,series_type,annot)]
+gse_gpl=gse_gpl[,.(gse,
+           gpl,
+           n_gsm,
+           series_type,
+           annot,
+           full_in_arch7 = (n_gsm==gsms_arch_7),
+           full_in_arch8 = (n_gsm==gsms_arch_8),
+           full_in_arch_zoo = (n_gsm==gsms_arch_zoo),
+           full_in_dee2 = (n_gsm==gsms_in_dee2)
+           )]
+head(gse_gpl)
+print(paste("total (gse,gpl)", length(gse_gpl$gse)))
+
+#73006 for checking
+find_exp_type= function(type_str){ 
+                                  exp_types=regmatches(x = type_str,
+                                                 m = gregexpr(pattern = "expression ([^;$])+",
+                                                              text =type_str,
+                                                              ignore.case = TRUE)
+                                             )[[1]]
+  return(c(sum(dict_exp_type[exp_types]),type_str==paste(collapse = ";",exp_types)))
+}
+
+# find_exp_numbers= function(type_str){ match(x = regmatches(x = type_str,
+#                                                  m = gregexpr(pattern = "expression ([^;$])+",
+#                                                               text =type_str,
+#                                                               ignore.case = TRUE)
+#                                              )[[1]],table = expression_types)
+# }
+prof_exp= lapply(gse_gpl$series_type, 
+                 FUN=find_exp_type)
+
+gse_gpl[,exp_type:=sapply(prof_exp,FUN = function(x){x[1]})]
+gse_gpl[,only_exp:=sapply(prof_exp,FUN = function(x){x[2]})]
+grp_by_type=gse_gpl[,.(n_gse_gpl=.N),
+                    by=list(exp_type,only_exp,annot,full_in_arch7,full_in_arch8,full_in_dee2,full_in_arch_zoo)]
+
+
+needed_type= c(sum(dict_exp_type[c("Expression profiling by array","Expression profiling by high throughput sequencing")]),
+               dict_exp_type["Expression profiling by array"],
+               dict_exp_type["Expression profiling by high throughput sequencing"])
+#needed types
+print(grp_by_type[exp_type%in%needed_type,sum(n_gse_gpl)])
+#only "expression by.." all types
+print(grp_by_type[only_exp==1 ,sum(n_gse_gpl)])
+#only "expression by.." interesting types
+print(grp_by_type[only_exp==1 & exp_type%in%needed_type ,sum(n_gse_gpl)])
+#only "expression by.."  and have annotation (all types)
+print(grp_by_type[only_exp==1 & annot==TRUE ,sum(n_gse_gpl)])
+#only "expression by.."  and have annotation (interesting types)
+print(grp_by_type[only_exp==1 & annot==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+#only "expression by.."  and all samples in arch v7(all types)
+print(grp_by_type[only_exp==1 & full_in_arch7==TRUE,sum(n_gse_gpl)])
+#only "expression by.."  and all samples in arch v7(interesting types)
+print(grp_by_type[only_exp==1 & full_in_arch7==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+
+#only "expression by.."  and all samples in arch v8(all types)
+print(grp_by_type[only_exp==1 & full_in_arch8==TRUE,sum(n_gse_gpl)])
+#only "expression by.."  and all samples in arch v8(interesting types)
+print(grp_by_type[only_exp==1 & full_in_arch8==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+#only "expression by.."  and all samples in arch zoo(all types)
+print(grp_by_type[only_exp==1 & full_in_arch_zoo==TRUE,sum(n_gse_gpl)])
+#only "expression by.."  and all samples in arch zoo(interesting types)
+print(grp_by_type[only_exp==1 & full_in_arch_zoo==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+#only "expression by.."  and all samples in dee2(all types)
+print(grp_by_type[only_exp==1 & full_in_dee2==TRUE,sum(n_gse_gpl)])
+#only "expression by.."  and all samples in dee2(interesting types)
+print(grp_by_type[only_exp==1 & full_in_dee2==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+#only expression by and at least something (all types)
+print(grp_by_type[only_exp==1 & (full_in_dee2==TRUE|
+                                 full_in_arch7==TRUE|
+                                 full_in_arch8 == TRUE|
+                                 full_in_arch_zoo == TRUE|
+                                 full_in_dee2==TRUE )   ,sum(n_gse_gpl)])
+#only expression by and at least something (interesting types)
+print(grp_by_type[only_exp==1 & (full_in_dee2==TRUE|
+                                 full_in_arch7==TRUE|
+                                 full_in_arch8 == TRUE|
+                                 full_in_arch_zoo == TRUE|
+                                 full_in_dee2==TRUE ) & exp_type%in%needed_type  ,sum(n_gse_gpl)])
+
+print(grp_by_type[,sum(n_gse_gpl)])
+
+```
+
+```{r}
+a = read.csv("D:\\datasets/stepik/gt_data.tsv", sep="\t", header = FALSE, row.names = 1)
+N=67
+for (i in rownames(a)) {
+  row= a[i,]
+  real_d=sum(row=="0/0")
+  real_r=sum(row=="1/1")
+  real_g=sum(row=="0/1")
+  p=(2*real_d+real_g)/(2*N)
+  q=(2*real_r+real_g)/(2*N)
+  H=real_g/N
+  f=1-H/(2*p*q)
+  if (f< (-0.8)){
+    print(paste0(i , " " , f))
+  }
+} 
+
+
+
+library(PopGenome)
+a <- readData("d://datasets/stepik")
+q <- concatenate.regions(a)
+q<- neutrality.stats(q)
+q@Tajima.D
+
+```
+```{r}
+a=geo_samples[geo_series, .(geo_samples$Accession,geo_series$Accession,geo_samples$Series), on=.(i.Accession%in%unlist(strsplit(Series,";")))]
+```
+
+```{r}
+vector<- geo_samples[,setNames(Series,Accession)]
+v2=strsplit(vector,split = ";")
+gsm_to_gse <- data.table(gsm=rep(names(v2),sapply(v2, length)),gse=unlist(v2))
+head(gsm_to_gse)
+gsm_gse_glp= gsm_to_gse[geo_samples,on="gsm==Accession"]
+gsm_gse_glp_m= merge(gsm_to_gse,geo_samples[,list(gsm=Accession,gpl=Platform)])
+```
+??????-???? ????????????
+```{r}
+types=strsplit(gse_gpl$series_type,split = ";")
+res_array= sapply(types, function(x){ "Expression profiling by array"%in% x})
+res_seq= sapply(types, function(x){ "Expression profiling by high throughput sequencing" %in% x})
+res= sapply(types, function(x){all(x %in% c("Expression profiling by array", "Expression profiling by high throughput sequencing"))})
+gse_gpl[,only_expr:=res]
+test=gse_gpl[only_expr==TRUE & annot==TRUE,.N]
+gse_gpl= gse_gpl[,.(gse,gpl,n_gsm,series_type=(strsplit(series_type,";")),annot, expression_type(sub("(expression ([^;]+)).*","\\1",series_type,ignore.case = TRUE)))]
+regmatches()
+#regmatches(all_type_strings[1], gregexpr("expression (.+)(?=(\\s*($|;)))", all_type_strings[1], perl=TRUE,ignore.case = TRUE))
+#sub("(expression (.+))(?=(\\s*($|;)))","\\1",all_type_strings[1],perl = TRUE,ignore.case = TRUE)
+get_type<- function(x){
+  res=grep(pattern = "expression profiling by \\w+",x = x, ignore.case = TRUE)
+  return(res)
+}
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
