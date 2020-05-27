@@ -22,14 +22,15 @@ geo_samples[, c("GSE") := # Assign the below result to new columns in geo_sample
 Read GEO and parse gpl annotations
 ```{r}
 library(data.table)
-geo_platform= fread("d:\\datasets/GEO_stats/geo_platforms.tsv")
-geo_samples = fread("d:\\datasets/GEO_stats/geo_samples.tsv")
-geo_series= fread("d:\\datasets/GEO_stats/geo_table.tsv")
+data_dir="G:\\datasets/"
+geo_platform= fread(paste0(data_dir,"GEO_stats/geo_platforms.tsv"))
+geo_samples = fread(paste0(data_dir,"GEO_stats/geo_samples.tsv"))
+geo_series= fread(paste0(data_dir,"GEO_stats/geo_table.tsv"))
 print(length(unique(geo_platform$Accession)))
 print(length(unique(geo_samples$Accession)))
 print(length(unique(geo_series$Accession)))
 
-annot_gpl= fread("d:\\datasets/GEO_stats/annot_gpls.txt",header = FALSE,sep = "/",col.names = c("gpl"),select =3 )
+annot_gpl= fread(paste0(data_dir,"GEO_stats/annot_gpls.txt"),header = FALSE,sep = "/",col.names = c("gpl"),select =3 )
 DT_GEO=geo_samples[,.(gsm=Accession,gse=strsplit(x = Series,split = ";"),gpl=Platform)]
 DT_GEO[,len:=sapply(gse, length)]
 DT_GEO=DT_GEO[,.(gsm=rep(gsm,len),gse=unlist(gse),gpl=rep(gpl,len))]
@@ -61,7 +62,7 @@ h5_files_to_DT= function(path_to_folder){
   DT_h5=DT_h5[,.(gsm=rep(gsm,len),gse=unlist(gse),gpl=rep(gpl,len))]
   return(DT_h5)
 }
-DT_arch7= h5_files_to_DT(path_to_folder = "D://datasets/ARCHS4_v7/")
+DT_arch7= h5_files_to_DT(path_to_folder = paste0(data_dir,"ARCHS4_v7/"))
 # DT_GEO = DT_arch7[DT_GEO,
 #                   .(gsm=i.gsm,
 #                     gse=i.gse,
@@ -72,20 +73,20 @@ DT_arch7= h5_files_to_DT(path_to_folder = "D://datasets/ARCHS4_v7/")
 #                   on=c(gse="gse",gsm="gsm")]
 
 DT_GEO[DT_arch7,on=c(gse="gse",gsm="gsm"),in_arch_7:=(i.gsm==gsm)*(i.gse==gse)*(i.gpl==gpl)]
-DT_arch8 = h5_files_to_DT(path_to_folder = "D://datasets/ARCHS4_v8/")
+DT_arch8 = h5_files_to_DT(path_to_folder = paste0(data_dir,"ARCHS4_v8/"))
 DT_GEO[DT_arch8,on=c(gse="gse",gsm="gsm"),in_arch_8:=(i.gsm==gsm)*(i.gse==gse)*(i.gpl==gpl)]
 #trubles with v8!!!
-DT_ArchZOO_count=h5_files_to_DT(path_to_folder = "D://datasets/ARCHS4_zoo_counts/")
+DT_ArchZOO_count=h5_files_to_DT(path_to_folder = paste0(data_dir,"ARCHS4_zoo_counts/"))
 DT_GEO[DT_ArchZOO_count,on=c(gse="gse",gsm="gsm"),in_arch_ZOO:=(i.gsm==gsm)*(i.gse==gse)*(i.gpl==gpl)]
 
 #support stuff
 
-a= h5read("D://datasets/ARCHS4_v8/human_matrix.h5","/meta/Sample_geo_accession")
+a= h5read(paste0(data_dir,"ARCHS4_v8/human_matrix.h5","/meta/Sample_geo_accession"))
 t=which(a[a=="GSM4128582"])
 a[t]
-a= h5read("D://datasets/ARCHS4_v8/human_matrix.h5","/meta/Sample_platform_id")
+a= h5read(paste0(data_dir,"ARCHS4_v8/human_matrix.h5","/meta/Sample_platform_id"))
 a[t]
-h5_test_file = "D://datasets/DEE2/srr_files/ecoli_SRR_matrix.h5"
+h5_test_file = paste0(data_dir,"DEE2/srr_files/ecoli_SRR_matrix.h5")
 
 h5ls(h5_test_file,all = TRUE)
 h5f_arch = H5Fopen(arch_h5)
@@ -104,9 +105,9 @@ a=fread(test_tsv, header = TRUE,sep = "\t")
 
 parse dee2 metadata
 ```{r}
-meta_data_folder = "D:/datasets/DEE2/metadata/"
+meta_data_folder = paste0(data_dir,"DEE2/metadata/")
 DT_DEE2_meta=data.table()
-DEE2_meta_files=list.files(file.path(meta_data_folder), '\\.tsv.cut$', full.names = TRUE)
+DEE2_meta_files=list.files(file.path(meta_data_folder), '\\.tsv$', full.names = TRUE)
 for (destfile in DEE2_meta_files) {
  dee_part= fread(destfile, header = TRUE,sep = "\t", col.names = c("gsm","gse"),select =c(6,7))
 DT_DEE2_meta=rbindlist(l=list(DT_DEE2_meta,dee_part))
@@ -213,12 +214,47 @@ print(grp_by_type[only_exp==1 & (full_in_dee2==TRUE|
                                  full_in_arch_zoo == TRUE|
                                  full_in_dee2==TRUE ) & exp_type%in%needed_type  ,sum(n_gse_gpl)])
 
-print(grp_by_type[,sum(n_gse_gpl)])
+
+
+#27.05
+#only expression by array
+needed_type= dict_exp_type["Expression profiling by array"]
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type  ,sum(n_gse_gpl)])
+
+#only expression by HTS
+needed_type= dict_exp_type["Expression profiling by high throughput sequencing"]
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type  ,sum(n_gse_gpl)])
+
+#only expression by HTS xor array
+needed_type= c(dict_exp_type["Expression profiling by array"],
+               dict_exp_type["Expression profiling by high throughput sequencing"])
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type  ,sum(n_gse_gpl)])
+
+v7_minus_v8 <- fsetdiff(gse_gpl[full_in_arch7==TRUE], gse_gpl[full_in_arch8==TRUE])
+v8_minus_v7 <- fsetdiff(gse_gpl[full_in_arch8==TRUE], gse_gpl[full_in_arch7==TRUE])
+
+needed_type= c(sum(dict_exp_type[c("Expression profiling by array","Expression profiling by high throughput sequencing")]),
+               dict_exp_type["Expression profiling by array"],
+               dict_exp_type["Expression profiling by high throughput sequencing"])
+filter_type_8_minus_7 = v8_minus_v7[only_exp==1 &  exp_type%in%needed_type]
+  
+dif_examples = filter_type_8_minus_7[geo_series, on=c(gse="Accession"), organism:=i.Taxonomy]
+print(unique(dif_examples$organism))
+
+head(dif_examples[organism=='Homo sapiens']) #max n_gsm 1860   GSE110154
+head(dif_examples[organism=='Mus musculus']) # max n_gsm 653   GSE123103
+  
+grp_dif_by_type =v8_minus_v7[only_exp==1,.(n_gse_gpl=.N),
+                    by=list(exp_type,annot,full_in_arch7,full_in_arch8,full_in_dee2,full_in_arch_zoo)]
+
+
+#head(v8_minus_v7)
+v8_minus_v7[geo_series,on=c(gse="Accsession",gsm="gsm"),in_dee2:=(i.gsm==gsm)*(i.gse==gse)]
 
 ```
 
 ```{r}
-a = read.csv("D:\\datasets/stepik/gt_data.tsv", sep="\t", header = FALSE, row.names = 1)
+a = read.csv(data_dir+"stepik/gt_data.tsv", sep="\t", header = FALSE, row.names = 1)
 N=67
 for (i in rownames(a)) {
   row= a[i,]
@@ -237,7 +273,7 @@ for (i in rownames(a)) {
 
 
 library(PopGenome)
-a <- readData("d://datasets/stepik")
+a <- readData(data_dir+"stepik")
 q <- concatenate.regions(a)
 q<- neutrality.stats(q)
 q@Tajima.D

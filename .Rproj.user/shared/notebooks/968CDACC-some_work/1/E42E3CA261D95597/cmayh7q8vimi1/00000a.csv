@@ -1,5 +1,0 @@
-"0","gse_gpl[,.(n_gse_gpl=.N), by=list(exp_type)]
-"
-"2","Error in `[.data.table`(gse_gpl, , .(n_gse_gpl = .N), by = list(exp_type)) : 
-  column or expression 1 of 'by' or 'keyby' is type list. Do not quote column names. Usage: DT[,sum(colC),by=list(colA,month(colB))]
-"
