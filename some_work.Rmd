@@ -22,7 +22,7 @@ geo_samples[, c("GSE") := # Assign the below result to new columns in geo_sample
 Read GEO and parse gpl annotations
 ```{r}
 library(data.table)
-data_dir="G:\\datasets/"
+data_dir="D:\\datasets/"
 geo_platform= fread(paste0(data_dir,"GEO_stats/geo_platforms.tsv"))
 geo_samples = fread(paste0(data_dir,"GEO_stats/geo_samples.tsv"))
 geo_series= fread(paste0(data_dir,"GEO_stats/geo_table.tsv"))
@@ -143,8 +143,12 @@ gse_gpl=gse_gpl[,.(gse,
            full_in_arch_zoo = (n_gsm==gsms_arch_zoo),
            full_in_dee2 = (n_gsm==gsms_in_dee2)
            )]
+
+gse_gpl[geo_platform,on=c(gpl="Accession"),gpl_org:=i.Taxonomy]
+gse_gpl=gse_gpl[gpl_org %in% c("Homo sapiens","Mus musculus")]
+#gse_gpl=gse_gpl[!(gpl_org %in% c("Homo sapiens","Mus musculus"))]
 head(gse_gpl)
-print(paste("total (gse,gpl)", length(gse_gpl$gse)))
+print(paste("total (gse,gpl)", length(gse_gpl$gse))) #105180
 
 #73006 for checking
 find_exp_type= function(type_str){ 
@@ -162,14 +166,17 @@ find_exp_type= function(type_str){
 #                                                               ignore.case = TRUE)
 #                                              )[[1]],table = expression_types)
 # }
+
 prof_exp= lapply(gse_gpl$series_type, 
                  FUN=find_exp_type)
 
 gse_gpl[,exp_type:=sapply(prof_exp,FUN = function(x){x[1]})]
 gse_gpl[,only_exp:=sapply(prof_exp,FUN = function(x){x[2]})]
 grp_by_type=gse_gpl[,.(n_gse_gpl=.N),
-                    by=list(exp_type,only_exp,annot,full_in_arch7,full_in_arch8,full_in_dee2,full_in_arch_zoo)]
+                    by=list(exp_type,only_exp,annot,full_in_arch7,full_in_arch8,full_in_dee2,full_in_arch_zoo,gpl_org)]
 
+#has expression by
+print(grp_by_type[exp_type>0 & annot==TRUE,sum(n_gse_gpl)])
 
 needed_type= c(sum(dict_exp_type[c("Expression profiling by array","Expression profiling by high throughput sequencing")]),
                dict_exp_type["Expression profiling by array"],
@@ -185,30 +192,157 @@ print(grp_by_type[only_exp==1 & annot==TRUE ,sum(n_gse_gpl)])
 #only "expression by.."  and have annotation (interesting types)
 print(grp_by_type[only_exp==1 & annot==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
 #only "expression by.."  and all samples in arch v7(all types)
-print(grp_by_type[only_exp==1 & full_in_arch7==TRUE,sum(n_gse_gpl)])
-#only "expression by.."  and all samples in arch v7(interesting types)
-print(grp_by_type[only_exp==1 & full_in_arch7==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+print(grp_by_type[full_in_arch7==TRUE,sum(n_gse_gpl)])
+print(grp_by_type[exp_type>0 & full_in_arch7==TRUE &
+                               is.na(full_in_dee2) &
+                               is.na(full_in_arch8) &
+                               is.na(full_in_arch_zoo) &
+                               is.na(full_in_dee2)  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & full_in_arch7==TRUE &
+                               is.na(full_in_dee2) &
+                               is.na(full_in_arch8) &
+                               is.na(full_in_arch_zoo) &
+                               is.na(full_in_dee2) ,sum(n_gse_gpl)])
 
-#only "expression by.."  and all samples in arch v8(all types)
-print(grp_by_type[only_exp==1 & full_in_arch8==TRUE,sum(n_gse_gpl)])
-#only "expression by.."  and all samples in arch v8(interesting types)
+# all samples in arch v7(interesting types)
+print(grp_by_type[full_in_arch7==TRUE & exp_type%in%needed_type,sum(n_gse_gpl)])
+
+print(grp_by_type[full_in_arch7==TRUE &
+                   is.na(full_in_dee2) &
+                   is.na(full_in_arch8 ) &
+                   is.na(full_in_arch_zoo)&
+                   is.na(full_in_dee2) & exp_type%in%needed_type ,sum(n_gse_gpl)])
+print(grp_by_type[exp_type>0 & full_in_arch7==TRUE
+                  & exp_type%in%needed_type ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & full_in_arch7==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & full_in_arch7==TRUE &
+                   is.na(full_in_dee2) &
+                   is.na(full_in_arch8 ) &
+                   is.na(full_in_arch_zoo)&
+                   is.na(full_in_dee2) & exp_type%in%needed_type,sum(n_gse_gpl)])
+
+
+#all samples in arch v8(all types)
+print(grp_by_type[full_in_arch8==TRUE,sum(n_gse_gpl)])
+print(grp_by_type[full_in_arch8==TRUE
+                  &is.na(full_in_dee2) &
+                                 is.na(full_in_arch7) &
+                                 is.na(full_in_arch_zoo) &
+                                 is.na(full_in_dee2)  ,sum(n_gse_gpl)])
+print(grp_by_type[exp_type>0 & full_in_arch8==TRUE
+                  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & full_in_arch8==TRUE  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & full_in_arch8==TRUE&
+                                is.na(full_in_dee2) &
+                                 is.na(full_in_arch7) &
+                                 is.na(full_in_arch_zoo) &
+                                 is.na(full_in_dee2) ,sum(n_gse_gpl)])
+
+
+# all samples in arch v8(interesting types)
+print(grp_by_type[full_in_arch8==TRUE & exp_type%in%needed_type,sum(n_gse_gpl)])
+print(grp_by_type[full_in_arch8==TRUE&
+                                is.na(full_in_dee2) &
+                                 is.na(full_in_arch7) &
+                                 is.na(full_in_arch_zoo) &
+                                 is.na(full_in_dee2) & exp_type%in%needed_type ,sum(n_gse_gpl)])
+
+print(grp_by_type[exp_type>0 & full_in_arch8==TRUE
+                  & exp_type%in%needed_type ,sum(n_gse_gpl)])
 print(grp_by_type[only_exp==1 & full_in_arch8==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & full_in_arch8==TRUE&
+                                is.na(full_in_dee2) &
+                                 is.na(full_in_arch7) &
+                                 is.na(full_in_arch_zoo) &
+                                 is.na(full_in_dee2) &
+                                exp_type%in%needed_type,sum(n_gse_gpl)])
+
+
 #only "expression by.."  and all samples in arch zoo(all types)
-print(grp_by_type[only_exp==1 & full_in_arch_zoo==TRUE,sum(n_gse_gpl)])
-#only "expression by.."  and all samples in arch zoo(interesting types)
-print(grp_by_type[only_exp==1 & full_in_arch_zoo==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
-#only "expression by.."  and all samples in dee2(all types)
-print(grp_by_type[only_exp==1 & full_in_dee2==TRUE,sum(n_gse_gpl)])
-#only "expression by.."  and all samples in dee2(interesting types)
+print(grp_by_type[full_in_arch_zoo==TRUE ,sum(n_gse_gpl)])
+print(grp_by_type[is.na(full_in_arch8) &
+                  is.na(full_in_dee2) &
+                  is.na(full_in_arch7) &
+                  full_in_arch_zoo == TRUE
+                 ,sum(n_gse_gpl)])
+
+print(grp_by_type[exp_type>0 & full_in_arch_zoo==TRUE
+                   ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & full_in_arch_zoo==TRUE  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & is.na(full_in_arch8) &
+                  is.na(full_in_dee2) &
+                  is.na(full_in_arch7) &
+                  full_in_arch_zoo == TRUE ,sum(n_gse_gpl)])
+
+# all samples in arch zoo(interesting types)
+print(grp_by_type[full_in_arch_zoo==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+print(grp_by_type[is.na(full_in_arch8) &
+                  is.na(full_in_dee2) &
+                  is.na(full_in_arch7) &
+                  full_in_arch_zoo == TRUE
+                 & exp_type%in%needed_type,sum(n_gse_gpl)])
+
+print(grp_by_type[exp_type>0 & full_in_arch_zoo==TRUE & exp_type%in%needed_type
+                   ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & full_in_arch_zoo==TRUE & exp_type%in%needed_type  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & is.na(full_in_arch8) &
+                  is.na(full_in_dee2) &
+                  is.na(full_in_arch7) &
+                  full_in_arch_zoo == TRUE& exp_type%in%needed_type ,sum(n_gse_gpl)])
+
+#all samples in dee2(all types)
+print(grp_by_type[full_in_dee2==TRUE ,sum(n_gse_gpl)])
+print(grp_by_type[is.na(full_in_arch8) &
+                  full_in_dee2==TRUE &
+                  is.na(full_in_arch7) &
+                  is.na(full_in_arch_zoo)
+                 ,sum(n_gse_gpl)])
+
+print(grp_by_type[exp_type>0 & full_in_dee2==TRUE
+                   ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & full_in_dee2==TRUE  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & is.na(full_in_arch8)&
+                                full_in_dee2==TRUE &
+                                is.na(full_in_arch7) &
+                                is.na(full_in_arch_zoo) ,sum(n_gse_gpl)])
+
+#all samples in dee2(interesting types)
+
+
+print(grp_by_type[full_in_dee2==TRUE & exp_type%in%needed_type,sum(n_gse_gpl)])
+print(grp_by_type[is.na(full_in_arch8)&
+                                full_in_dee2==TRUE &
+                                is.na(full_in_arch7) &
+                                is.na(full_in_arch_zoo)  &
+                  exp_type%in%needed_type ,sum(n_gse_gpl)])
+
+print(grp_by_type[exp_type>0 & full_in_dee2==TRUE
+                  & exp_type%in%needed_type ,sum(n_gse_gpl)])
 print(grp_by_type[only_exp==1 & full_in_dee2==TRUE & exp_type%in%needed_type ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1 & is.na(full_in_arch8)&
+                                full_in_dee2==TRUE &
+                                is.na(full_in_arch7) &
+                                is.na(full_in_arch_zoo)  &
+                                 exp_type%in%needed_type,sum(n_gse_gpl)])
+
 #only expression by and at least something (all types)
 print(grp_by_type[only_exp==1 & (full_in_dee2==TRUE|
                                  full_in_arch7==TRUE|
                                  full_in_arch8 == TRUE|
                                  full_in_arch_zoo == TRUE|
                                  full_in_dee2==TRUE )   ,sum(n_gse_gpl)])
+print(grp_by_type[exp_type>0 & (full_in_dee2==TRUE|
+                                 full_in_arch7==TRUE|
+                                 full_in_arch8 == TRUE|
+                                 full_in_arch_zoo == TRUE|
+                                 full_in_dee2==TRUE )   ,sum(n_gse_gpl)])
 #only expression by and at least something (interesting types)
-print(grp_by_type[only_exp==1 & (full_in_dee2==TRUE|
+print(grp_by_type[ (full_in_dee2==TRUE|
+                                 full_in_arch7==TRUE|
+                                 full_in_arch8 == TRUE|
+                                 full_in_arch_zoo == TRUE|
+                                 full_in_dee2==TRUE ) & exp_type%in%needed_type  ,sum(n_gse_gpl)])
+print(grp_by_type[exp_type>0 & (full_in_dee2==TRUE|
                                  full_in_arch7==TRUE|
                                  full_in_arch8 == TRUE|
                                  full_in_arch_zoo == TRUE|
@@ -216,19 +350,51 @@ print(grp_by_type[only_exp==1 & (full_in_dee2==TRUE|
 
 
 
+print(grp_by_type[only_exp==1 & (full_in_dee2==TRUE|
+                                 full_in_arch7==TRUE|
+                                 full_in_arch8 == TRUE|
+                                 full_in_arch_zoo == TRUE|
+                                 full_in_dee2==TRUE ) & exp_type%in%needed_type  ,sum(n_gse_gpl)])
+
+
 #27.05
 #only expression by array
 needed_type= dict_exp_type["Expression profiling by array"]
 print(grp_by_type[only_exp==1  & exp_type%in%needed_type  ,sum(n_gse_gpl)])
-
+#expression by array
+needed_type= dict_exp_type["Expression profiling by array"]
+print(grp_by_type[exp_type%in%needed_type  ,sum(n_gse_gpl)])
+print(grp_by_type[exp_type%in%needed_type & annot==TRUE  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type & annot==TRUE  ,sum(n_gse_gpl)])
 #only expression by HTS
 needed_type= dict_exp_type["Expression profiling by high throughput sequencing"]
 print(grp_by_type[only_exp==1  & exp_type%in%needed_type  ,sum(n_gse_gpl)])
+# expression by HTS
+needed_type= dict_exp_type["Expression profiling by high throughput sequencing"]
+print(grp_by_type[exp_type%in%needed_type  ,sum(n_gse_gpl)])
+print(grp_by_type[exp_type%in%needed_type & annot==TRUE  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type & annot==TRUE  ,sum(n_gse_gpl)])
 
-#only expression by HTS xor array
+# expression by HTS xor array
 needed_type= c(dict_exp_type["Expression profiling by array"],
                dict_exp_type["Expression profiling by high throughput sequencing"])
-print(grp_by_type[only_exp==1  & exp_type%in%needed_type  ,sum(n_gse_gpl)])
+print(grp_by_type[exp_type%in%needed_type  ,sum(n_gse_gpl)])
+print(grp_by_type[exp_type%in%needed_type & annot==TRUE  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type & annot==TRUE  ,sum(n_gse_gpl)])
+# expression by array OR HTS
+needed_type= c(sum(dict_exp_type[c("Expression profiling by array","Expression profiling by high throughput sequencing")]),
+               dict_exp_type["Expression profiling by array"],
+               dict_exp_type["Expression profiling by high throughput sequencing"])
+
+print(grp_by_type[exp_type%in%needed_type  ,sum(n_gse_gpl)])
+print(grp_by_type[exp_type%in%needed_type & annot==TRUE  ,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type,sum(n_gse_gpl)])
+print(grp_by_type[only_exp==1  & exp_type%in%needed_type & annot==TRUE  ,sum(n_gse_gpl)])
+
+
 
 v7_minus_v8 <- fsetdiff(gse_gpl[full_in_arch7==TRUE], gse_gpl[full_in_arch8==TRUE])
 v8_minus_v7 <- fsetdiff(gse_gpl[full_in_arch8==TRUE], gse_gpl[full_in_arch7==TRUE])
